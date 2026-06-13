@@ -16,6 +16,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -121,6 +122,20 @@ fun TakeExamScreen(
                                     color = if (isDanger) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSecondaryContainer
                                 )
                             }
+                        }
+
+                        // Save & Exit button
+                        IconButton(
+                            onClick = { viewModel.saveAndExit() },
+                            modifier = Modifier
+                                .padding(end = 4.dp)
+                                .testTag("save_exit_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Save,
+                                contentDescription = "Save & Exit",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
                         }
 
                         // Prominent top submit button
@@ -270,16 +285,16 @@ fun TakeExamScreen(
             AlertDialog(
                 onDismissRequest = { showCancelDialog = false },
                 title = { Text("Quit Practice Exam?") },
-                text = { Text("Your current responses in this attempt will be lost. Are you sure you want to exit?") },
+                text = { Text("Your responses will be saved as a draft. You can continue later from where you left off.") },
                 confirmButton = {
                     TextButton(
                         onClick = {
                             showCancelDialog = false
-                            viewModel.navigateTo(Screen.ExamDetail(exam!!.id))
+                            viewModel.saveAndExit()
                         },
-                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                        modifier = Modifier.testTag("save_and_exit_confirm_button")
                     ) {
-                        Text("Exit")
+                        Text("Save & Exit")
                     }
                 },
                 dismissButton = {

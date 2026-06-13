@@ -15,15 +15,31 @@ class ExamRepository(private val examDao: ExamDao) {
 
     suspend fun deleteExam(examId: Long) {
         examDao.deleteExamById(examId)
-        examDao.deleteAttemptsForExam(examId) // cascade delete attempts manually
+        examDao.deleteAttemptsForExam(examId)
     }
 
     suspend fun insertAttempt(attempt: ExamAttempt): Long {
         return examDao.insertAttempt(attempt)
     }
 
+    suspend fun updateAttempt(attempt: ExamAttempt) {
+        examDao.updateAttempt(attempt)
+    }
+
     fun getAttemptsForExam(examId: Long): Flow<List<ExamAttempt>> {
         return examDao.getAttemptsForExam(examId)
+    }
+
+    suspend fun getDraftAttempt(examId: Long): ExamAttempt? {
+        return examDao.getDraftAttempt(examId)
+    }
+
+    fun getDraftExamIds(): Flow<List<Long>> {
+        return examDao.getDraftExamIds()
+    }
+
+    suspend fun deleteDraftAttempt(examId: Long) {
+        examDao.deleteDraftAttempt(examId)
     }
 
     suspend fun deleteAttemptsForExam(examId: Long) {

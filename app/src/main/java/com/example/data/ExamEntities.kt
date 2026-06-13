@@ -30,7 +30,8 @@ data class ExamAttempt(
     val unansweredCount: Int,
     val percentage: Double,
     val negativeScore: Double, // Negative score value
-    val negativeScorePercentage: Double // Percentage with negative scoring applied
+    val negativeScorePercentage: Double, // Percentage with negative scoring applied
+    val isDraft: Boolean = false
 )
 
 @JsonClass(generateAdapter = true)

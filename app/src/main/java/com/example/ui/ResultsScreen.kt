@@ -8,6 +8,7 @@ import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -15,10 +16,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowDown
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -66,7 +71,6 @@ fun ResultsScreen(
 
     val hasKey = remember(correctKeyAnswers) { correctKeyAnswers.isNotEmpty() }
 
-    // Let's compute section individual analytical numbers
     val sectionsAnalytics = remember(sections, attemptAnswers, correctKeyAnswers) {
         sections.map { sec ->
             val range = sec.startQuestion..sec.endQuestion
@@ -106,13 +110,38 @@ fun ResultsScreen(
         }
     }
 
+    val context = LocalContext.current
+    var copiedMsg by remember { mutableStateOf(false) }
+
+    val csvText = remember(attemptAnswers, currentExam) {
+        val sheets = JsonSerializer.deserializeSections(currentExam.sectionsJson)
+        val sb = StringBuilder()
+        sb.append("Question,Answer,Section\n")
+        attemptAnswers.keys.sorted().forEach { qNum ->
+            val ans = attemptAnswers[qNum] ?: 0
+            val ansChar = when (ans) {
+                1 -> "A"
+                2 -> "B"
+                3 -> "C"
+                4 -> "D"
+                else -> ""
+            }
+            val sectionName = sheets.find { qNum in it.startQuestion..it.endQuestion }?.name ?: ""
+            sb.append("$qNum,$ansChar,$sectionName\n")
+        }
+        sb.toString()
+    }
+
+    var omrExpanded by remember { mutableStateOf(false) }
+    val expandedSections = remember { mutableStateMapOf<Int, Boolean>() }
+
     Scaffold(
         topBar = {
             Column {
                 TopAppBar(
                     title = {
                         Text(
-                            text = if (hasKey) "Performance Scorecard" else "Session Saved",
+                            text = if (hasKey) "Scorecard" else "Saved",
                             fontWeight = FontWeight.Black,
                             style = MaterialTheme.typography.titleLarge,
                             color = MaterialTheme.colorScheme.primary
@@ -126,6 +155,40 @@ fun ResultsScreen(
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                                 contentDescription = "Go Back"
+                            )
+                        }
+                    },
+                    actions = {
+                        IconButton(
+                            onClick = {
+                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                val clip = ClipData.newPlainText("${currentExam.name} Answers", csvText)
+                                clipboard.setPrimaryClip(clip)
+                                copiedMsg = true
+                            },
+                            modifier = Modifier.testTag("copy_csv_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ContentCopy,
+                                contentDescription = "Copy CSV",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        IconButton(
+                            onClick = {
+                                val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                    type = "text/plain"
+                                    putExtra(Intent.EXTRA_SUBJECT, "${currentExam.name} - Practiced Bubble Sheet")
+                                    putExtra(Intent.EXTRA_TEXT, csvText)
+                                }
+                                context.startActivity(Intent.createChooser(shareIntent, "Share Completed Answers"))
+                            },
+                            modifier = Modifier.testTag("share_csv_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Share,
+                                contentDescription = "Share CSV",
+                                tint = MaterialTheme.colorScheme.primary
                             )
                         }
                     },
@@ -145,9 +208,9 @@ fun ResultsScreen(
                 .padding(innerPadding)
                 .background(MaterialTheme.colorScheme.background),
             contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Global Metrics Overview Banner
+            // Compact Score Header
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -156,182 +219,114 @@ fun ResultsScreen(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(18.dp),
+                            .padding(16.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
                             text = currentExam.name,
-                            style = MaterialTheme.typography.titleLarge,
+                            style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary,
                             textAlign = TextAlign.Center
                         )
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
 
                         if (hasKey) {
-                            // Large beautiful percentage circles
+                            // Compact score chips
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceEvenly,
-                                verticalAlignment = Alignment.CenterVertically
+                                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally)
                             ) {
-                                // Standard Pct circle
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Surface(
-                                        modifier = Modifier.size(90.dp),
-                                        shape = CircleShape,
-                                        color = MaterialTheme.colorScheme.primaryContainer
-                                    ) {
-                                        Box(contentAlignment = Alignment.Center) {
-                                            Text(
-                                                text = "${String.format("%.1f", currentAttempt.percentage)}%",
-                                                fontWeight = FontWeight.Black,
-                                                fontSize = 16.sp,
-                                                color = MaterialTheme.colorScheme.primary
-                                            )
-                                        }
-                                    }
-                                    Spacer(modifier = Modifier.height(6.dp))
-                                    Text(
-                                        text = "Standard Score",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        fontWeight = FontWeight.Bold
+                                SuggestionChip(
+                                    onClick = {},
+                                    label = {
+                                        Text(
+                                            "${String.format("%.1f", currentAttempt.percentage)}%",
+                                            fontWeight = FontWeight.Black,
+                                            fontSize = 14.sp
+                                        )
+                                    },
+                                    colors = SuggestionChipDefaults.suggestionChipColors(
+                                        containerColor = MaterialTheme.colorScheme.primaryContainer
                                     )
-                                }
-
-                                // Negative scoring Pct circle
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Surface(
-                                        modifier = Modifier.size(90.dp),
-                                        shape = CircleShape,
-                                        color = MaterialTheme.colorScheme.secondaryContainer
-                                    ) {
-                                        Box(contentAlignment = Alignment.Center) {
-                                            Text(
-                                                text = "${String.format("%.1f", currentAttempt.negativeScorePercentage)}%",
-                                                fontWeight = FontWeight.Black,
-                                                fontSize = 16.sp,
-                                                color = MaterialTheme.colorScheme.secondary
-                                            )
-                                        }
-                                    }
-                                    Spacer(modifier = Modifier.height(6.dp))
-                                    Text(
-                                        text = "Negative Marking",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        fontWeight = FontWeight.Bold
+                                )
+                                SuggestionChip(
+                                    onClick = {},
+                                    label = {
+                                        Text(
+                                            "Neg: ${String.format("%.1f", currentAttempt.negativeScorePercentage)}%",
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 13.sp
+                                        )
+                                    },
+                                    colors = SuggestionChipDefaults.suggestionChipColors(
+                                        containerColor = MaterialTheme.colorScheme.secondaryContainer
                                     )
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(18.dp))
-                            HorizontalDivider()
-                            Spacer(modifier = Modifier.height(12.dp))
-
-                            // Score details
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                ScoreBreakdownItem(
-                                    label = "Correct",
-                                    count = currentAttempt.correctCount,
-                                    tint = Color(0xFF2E7D32),
-                                    modifier = Modifier.weight(1f)
-                                )
-                                ScoreBreakdownItem(
-                                    label = "Incorrect",
-                                    count = currentAttempt.incorrectCount,
-                                    tint = MaterialTheme.colorScheme.error,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                ScoreBreakdownItem(
-                                    label = "Unanswered",
-                                    count = currentAttempt.unansweredCount,
-                                    tint = Color.Gray,
-                                    modifier = Modifier.weight(1f)
                                 )
                             }
 
                             Spacer(modifier = Modifier.height(12.dp))
+
+                            // Inline stats row
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceEvenly
+                            ) {
+                                CompactStatItem(label = "Correct", count = currentAttempt.correctCount, tint = Color(0xFF2E7D32))
+                                CompactStatItem(label = "Incorrect", count = currentAttempt.incorrectCount, tint = MaterialTheme.colorScheme.error)
+                                CompactStatItem(label = "Blank", count = currentAttempt.unansweredCount, tint = Color.Gray)
+                            }
+
+                            Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                text = "Negative Score calculated as: +1 (Correct) | -0.33 (Incorrect) | 0 (Blank). Raw score is ${String.format("%.2f", currentAttempt.negativeScore)} out of ${currentAttempt.totalQuestions}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                text = "+1 (Correct) | -0.33 (Incorrect) | 0 (Blank) — Raw: ${String.format("%.2f", currentAttempt.negativeScore)}/${currentAttempt.totalQuestions}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                                 textAlign = TextAlign.Center,
-                                fontSize = 10.sp
+                                fontSize = 9.sp
                             )
                         } else {
-                            // Bubble Sheet response overview with no grading key
-                            Column(
+                            // No key — compact saved summary
+                            Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalAlignment = Alignment.CenterHorizontally
+                                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally)
                             ) {
-                                Surface(
-                                    modifier = Modifier.size(90.dp),
-                                    shape = CircleShape,
-                                    color = MaterialTheme.colorScheme.secondaryContainer
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Icon(
-                                            imageVector = Icons.Default.Check,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                                            modifier = Modifier.size(40.dp)
-                                        )
-                                    }
-                                }
-                                Spacer(modifier = Modifier.height(12.dp))
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = null,
+                                    tint = Color(0xFF2E7D32),
+                                    modifier = Modifier.size(18.dp)
+                                )
                                 Text(
                                     text = "Bubble Sheet Recorded",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Black,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = "Practice responses have been saved completely. Add or import an Answer Key CSV in modifications to grade this exam later.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
-                                    textAlign = TextAlign.Center,
-                                    modifier = Modifier.padding(horizontal = 16.dp)
-                                )
-
-                                Spacer(modifier = Modifier.height(16.dp))
-                                HorizontalDivider()
-                                Spacer(modifier = Modifier.height(12.dp))
-
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceEvenly
-                                ) {
-                                    val answered = currentAttempt.totalQuestions - currentAttempt.unansweredCount
-                                    ScoreBreakdownItem(
-                                        label = "Total Questions",
-                                        count = currentAttempt.totalQuestions,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                    ScoreBreakdownItem(
-                                        label = "Answered",
-                                        count = answered,
-                                        tint = Color(0xFF2E7D32),
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                    ScoreBreakdownItem(
-                                        label = "Blank",
-                                        count = currentAttempt.unansweredCount,
-                                        tint = Color.Gray,
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                }
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Responses saved. Add an Answer Key to grade later.",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            val answered = currentAttempt.totalQuestions - currentAttempt.unansweredCount
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceEvenly
+                            ) {
+                                CompactStatItem(label = "Total", count = currentAttempt.totalQuestions, tint = MaterialTheme.colorScheme.primary)
+                                CompactStatItem(label = "Answered", count = answered, tint = Color(0xFF2E7D32))
+                                CompactStatItem(label = "Blank", count = currentAttempt.unansweredCount, tint = Color.Gray)
                             }
                         }
                     }
                 }
             }
 
-            // Overall Answer Sheet Bubble Overview
+            // Collapsible OMR Bubble Grid
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -342,490 +337,375 @@ fun ResultsScreen(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(16.dp)
+                            .clickable { omrExpanded = !omrExpanded }
+                            .padding(14.dp)
                     ) {
-                        Text(
-                            text = "Answer Sheet Bubble Overview",
-                            fontWeight = FontWeight.Bold,
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        // Unified Visual OMR Legend
-                        Column(
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
-                                .padding(12.dp)
-                        ) {
-                            Text(
-                                text = "OMR Grid Color Legend:",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                LegendIndicatorItem(
-                                    color = Color(0xFF2E7D32),
-                                    bgColor = Color(0xFFE8F5E9),
-                                    text = "Correct Answer",
-                                    modifier = Modifier.weight(1f)
-                                )
-                                LegendIndicatorItem(
-                                    color = Color(0xFFEF5350),
-                                    bgColor = Color(0xFFFFEBEE),
-                                    text = "Incorrect Answer",
-                                    modifier = Modifier.weight(1f)
-                                )
-                            }
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                LegendIndicatorItem(
-                                    color = Color(0xFF3F51B5),
-                                    bgColor = Color(0xFFE8EAF6),
-                                    text = "Answer Saved (No Key)",
-                                    modifier = Modifier.weight(1f)
-                                )
-                                LegendIndicatorItem(
-                                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.6f),
-                                    bgColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                                    text = "Blank / Skipped",
-                                    modifier = Modifier.weight(1f)
-                                )
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        val totalQ = currentExam.totalQuestions
-                        val columnsCount = 6
-                        val qNumsList = (1..totalQ).toList()
-                        val questionChunks = qNumsList.chunked(columnsCount)
-
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            questionChunks.forEach { rowQuestions ->
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceEvenly
-                                ) {
-                                    rowQuestions.forEach { qNum ->
-                                        val userSelection = attemptAnswers[qNum] ?: 0
-                                        val correctSelection = if (hasKey) correctKeyAnswers[qNum] ?: 0 else 0
-                                        
-                                        val isCorrect = hasKey && userSelection == correctSelection
-                                        val isUnanswered = userSelection == 0
-
-                                        val userAnsChar = when (userSelection) {
-                                            1 -> "A"
-                                            2 -> "B"
-                                            3 -> "C"
-                                            4 -> "D"
-                                            else -> "—"
-                                        }
-
-                                        val correctAnsChar = when (correctSelection) {
-                                            1 -> "A"
-                                            2 -> "B"
-                                            3 -> "C"
-                                            4 -> "D"
-                                            else -> ""
-                                        }
-
-                                        val bubbleBgColor = when {
-                                            isUnanswered -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
-                                            !hasKey -> Color(0xFFE8EAF6) // light Indigo/Blue filled look
-                                            isCorrect -> Color(0xFFE8F5E9)
-                                            else -> Color(0xFFFFEBEE)
-                                        }
-
-                                        val borderColor = when {
-                                            isUnanswered -> MaterialTheme.colorScheme.outlineVariant
-                                            !hasKey -> Color(0xFF3F51B5) // Indigo border
-                                            isCorrect -> Color(0xFF2E7D32)
-                                            else -> Color(0xFFEF5350)
-                                        }
-
-                                        val textColor = when {
-                                            isUnanswered -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-                                            !hasKey -> Color(0xFF3F51B5) // Indigo text
-                                            isCorrect -> Color(0xFF1B5E20)
-                                            else -> Color(0xFFC62828)
-                                        }
-
-                                        Column(
-                                            horizontalAlignment = Alignment.CenterHorizontally,
-                                            modifier = Modifier.padding(2.dp)
-                                        ) {
-                                            Text(
-                                                text = "$qNum",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                fontWeight = FontWeight.Bold,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                fontSize = 11.sp
-                                            )
-                                            Spacer(modifier = Modifier.height(2.dp))
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(36.dp)
-                                                    .clip(CircleShape)
-                                                    .background(bubbleBgColor)
-                                                    .border(BorderStroke(1.5.dp, borderColor), CircleShape),
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                Text(
-                                                    text = userAnsChar,
-                                                    fontWeight = FontWeight.Black,
-                                                    fontSize = 13.sp,
-                                                    color = textColor,
-                                                    textAlign = TextAlign.Center
-                                                )
-                                            }
-                                            Spacer(modifier = Modifier.height(2.dp))
-                                            Box(
-                                                modifier = Modifier.height(14.dp),
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                if (hasKey && !isCorrect && !isUnanswered) {
-                                                    Text(
-                                                        text = "Key: $correctAnsChar",
-                                                        style = MaterialTheme.typography.labelSmall,
-                                                        color = Color(0xFF2E7D32),
-                                                        fontWeight = FontWeight.Black,
-                                                        fontSize = 10.sp
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    }
-                                    // Fill up remaining spots if list does not complete column count
-                                    val placeholders = columnsCount - rowQuestions.size
-                                    repeat(placeholders) {
-                                        Spacer(modifier = Modifier.width(44.dp).padding(4.dp))
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // CSV Export Card
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f)),
-                    shape = RoundedCornerShape(16.dp),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = "Export Practice Answers (CSV)",
-                            fontWeight = FontWeight.Bold,
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "Save or copy your practiced bubble sheet responses in standard CSV format.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
-                            textAlign = TextAlign.Center
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        val context = LocalContext.current
-                        var copiedMsg by remember { mutableStateOf(false) }
-
-                        val csvText = remember(attemptAnswers, currentExam) {
-                            val sheets = JsonSerializer.deserializeSections(currentExam.sectionsJson)
-                            val sb = StringBuilder()
-                            sb.append("Question,Answer,Section\n")
-                            attemptAnswers.keys.sorted().forEach { qNum ->
-                                val ans = attemptAnswers[qNum] ?: 0
-                                val ansChar = when (ans) {
-                                    1 -> "A"
-                                    2 -> "B"
-                                    3 -> "C"
-                                    4 -> "D"
-                                    else -> ""
-                                }
-                                val sectionName = sheets.find { qNum in it.startQuestion..it.endQuestion }?.name ?: ""
-                                sb.append("$qNum,$ansChar,$sectionName\n")
-                            }
-                            sb.toString()
-                        }
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            // Copy toclipboard
-                            Button(
-                                onClick = {
-                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                    val clip = ClipData.newPlainText("${currentExam.name} Answers", csvText)
-                                    clipboard.setPrimaryClip(clip)
-                                    copiedMsg = true
-                                },
-                                modifier = Modifier.weight(1f).testTag("copy_csv_button"),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-                                )
-                            ) {
-                                Text(if (copiedMsg) "Copied!" else "Copy CSV")
-                            }
-
-                            // Share via Intent
-                            Button(
-                                onClick = {
-                                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                        type = "text/plain"
-                                        putExtra(Intent.EXTRA_SUBJECT, "${currentExam.name} - Practiced Bubble Sheet")
-                                        putExtra(Intent.EXTRA_TEXT, csvText)
-                                    }
-                                    context.startActivity(Intent.createChooser(shareIntent, "Share Completed Answers"))
-                                },
-                                modifier = Modifier.weight(1f).testTag("share_csv_button")
-                            ) {
-                                Text("Share CSV")
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Per-Section Analytics Header
-            item {
-                Text(
-                    text = if (hasKey) "Section breakdown analytics" else "Section complete statistics",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
-            }
-
-            // Per-Section analytics cards
-            items(sectionsAnalytics) { secData ->
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = secData.sectionName,
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            if (hasKey) {
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    SuggestionChip(
-                                        onClick = {},
-                                        label = { Text("Correct: ${String.format("%.1f", secData.rawPercentage)}%") }
-                                    )
-                                    SuggestionChip(
-                                        onClick = {},
-                                        label = { Text("Neg: ${String.format("%.1f", secData.negativePercentage)}%") }
-                                    )
-                                }
-                            } else {
-                                val answeredSec = (secData.startQ..secData.endQ).count { attemptAnswers[it] ?: 0 != 0 }
-                                SuggestionChip(
-                                    onClick = {},
-                                    label = { Text("Filled: $answeredSec/${secData.totalQuestions}") }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Answer Sheet Overview",
+                                    fontWeight = FontWeight.Bold,
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.primary
                                 )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                // Inline legend dots
+                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    LegendDot(color = Color(0xFF2E7D32), label = "Correct")
+                                    LegendDot(color = MaterialTheme.colorScheme.error, label = "Incorrect")
+                                    if (hasKey) {
+                                        LegendDot(color = Color(0xFF3F51B5), label = "Saved")
+                                    }
+                                    LegendDot(color = Color.Gray, label = "Blank")
+                                }
                             }
+                            Icon(
+                                imageVector = if (omrExpanded) Icons.AutoMirrored.Filled.KeyboardArrowUp else Icons.AutoMirrored.Filled.KeyboardArrowDown,
+                                contentDescription = if (omrExpanded) "Collapse" else "Expand",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(16.dp)
-                        ) {
-                            if (hasKey) {
-                                Text(text = "Correct: ${secData.correct}", style = MaterialTheme.typography.bodySmall, color = Color(0xFF2E7D32), fontWeight = FontWeight.SemiBold)
-                                Text(text = "Incorrect: ${secData.incorrect}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.SemiBold)
-                                Text(text = "Blank: ${secData.empty}", style = MaterialTheme.typography.bodySmall, color = Color.Gray, fontWeight = FontWeight.SemiBold)
-                            } else {
-                                val answeredSec = (secData.startQ..secData.endQ).count { attemptAnswers[it] ?: 0 != 0 }
-                                val unansweredSec = secData.totalQuestions - answeredSec
-                                Text(text = "Filled: $answeredSec", style = MaterialTheme.typography.bodySmall, color = Color(0xFF2E7D32), fontWeight = FontWeight.SemiBold)
-                                Text(text = "Blank: $unansweredSec", style = MaterialTheme.typography.bodySmall, color = Color.Gray, fontWeight = FontWeight.SemiBold)
+
+                        AnimatedVisibility(visible = omrExpanded) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 12.dp)
+                            ) {
+                                val totalQ = currentExam.totalQuestions
+                                val columnsCount = 6
+                                val qNumsList = (1..totalQ).toList()
+                                val questionChunks = qNumsList.chunked(columnsCount)
+
+                                Column(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    questionChunks.forEach { rowQuestions ->
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceEvenly
+                                        ) {
+                                            rowQuestions.forEach { qNum ->
+                                                val userSelection = attemptAnswers[qNum] ?: 0
+                                                val correctSelection = if (hasKey) correctKeyAnswers[qNum] ?: 0 else 0
+                                                
+                                                val isCorrect = hasKey && userSelection == correctSelection
+                                                val isUnanswered = userSelection == 0
+
+                                                val userAnsChar = when (userSelection) {
+                                                    1 -> "A"
+                                                    2 -> "B"
+                                                    3 -> "C"
+                                                    4 -> "D"
+                                                    else -> "—"
+                                                }
+
+                                                val correctAnsChar = when (correctSelection) {
+                                                    1 -> "A"
+                                                    2 -> "B"
+                                                    3 -> "C"
+                                                    4 -> "D"
+                                                    else -> ""
+                                                }
+
+                                                val bubbleBgColor = when {
+                                                    isUnanswered -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                                                    !hasKey -> Color(0xFFE8EAF6)
+                                                    isCorrect -> Color(0xFFE8F5E9)
+                                                    else -> Color(0xFFFFEBEE)
+                                                }
+
+                                                val borderColor = when {
+                                                    isUnanswered -> MaterialTheme.colorScheme.outlineVariant
+                                                    !hasKey -> Color(0xFF3F51B5)
+                                                    isCorrect -> Color(0xFF2E7D32)
+                                                    else -> Color(0xFFEF5350)
+                                                }
+
+                                                val textColor = when {
+                                                    isUnanswered -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                                                    !hasKey -> Color(0xFF3F51B5)
+                                                    isCorrect -> Color(0xFF1B5E20)
+                                                    else -> Color(0xFFC62828)
+                                                }
+
+                                                Column(
+                                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                                    modifier = Modifier.padding(1.dp)
+                                                ) {
+                                                    Text(
+                                                        text = "$qNum",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                        fontSize = 10.sp
+                                                    )
+                                                    Spacer(modifier = Modifier.height(1.dp))
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .size(30.dp)
+                                                            .clip(CircleShape)
+                                                            .background(bubbleBgColor)
+                                                            .border(BorderStroke(1.dp, borderColor), CircleShape),
+                                                        contentAlignment = Alignment.Center
+                                                    ) {
+                                                        Text(
+                                                            text = userAnsChar,
+                                                            fontWeight = FontWeight.Black,
+                                                            fontSize = 11.sp,
+                                                            color = textColor,
+                                                            textAlign = TextAlign.Center
+                                                        )
+                                                    }
+                                                    Spacer(modifier = Modifier.height(1.dp))
+                                                    Box(
+                                                        modifier = Modifier.height(12.dp),
+                                                        contentAlignment = Alignment.Center
+                                                    ) {
+                                                        if (hasKey && !isCorrect && !isUnanswered) {
+                                                            Text(
+                                                                text = "K:$correctAnsChar",
+                                                                style = MaterialTheme.typography.labelSmall,
+                                                                color = Color(0xFF2E7D32),
+                                                                fontWeight = FontWeight.Bold,
+                                                                fontSize = 8.sp
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            val placeholders = columnsCount - rowQuestions.size
+                                            repeat(placeholders) {
+                                                Spacer(modifier = Modifier.width(36.dp))
+                                            }
+                                        }
+                                    }
+                                }
                             }
-                            Text(text = "Items: ${secData.totalQuestions}", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
             }
 
-            // Comprehensive review list header
+            // Expandable Section Analytics + Question Review
             item {
                 Text(
-                    text = if (hasKey) "Detailed Question Review" else "Detailed Saved Answers",
-                    style = MaterialTheme.typography.titleMedium,
+                    text = if (hasKey) "Section Breakdown" else "Section Statistics",
+                    style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(top = 8.dp)
+                    modifier = Modifier.padding(top = 4.dp)
                 )
             }
 
-            // Items list showcasing detailed selections
-            val totalQCount = currentExam.totalQuestions
-            val questions = if (hasKey) correctKeyAnswers.keys.sorted() else (1..totalQCount).toList()
-            
-            items(questions) { qNum ->
-                val userSelection = attemptAnswers[qNum] ?: 0
-                val correctSelection = if (hasKey) correctKeyAnswers[qNum] ?: 0 else 0
-
-                val isCorrect = hasKey && userSelection == correctSelection
-                val isUnanswered = userSelection == 0
+            items(sectionsAnalytics.size) { index ->
+                val secData = sectionsAnalytics[index]
+                val isExpanded = expandedSections[index] == true
 
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(
-                        containerColor = when {
-                            isUnanswered -> MaterialTheme.colorScheme.surface
-                            !hasKey -> Color(0xFFE8EAF6) // Beautiful light Indigo/Blue filled look for Answer Saved without a key
-                            isCorrect -> Color(0xFFE8F5E9)  // Soft light green
-                            else -> Color(0xFFFFEBEE)       // Soft light red
-                        }
-                    ),
-                    border = when {
-                        isUnanswered -> BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-                        !hasKey -> BorderStroke(1.5.dp, Color(0xFF3F51B5))
-                        else -> null
-                    }
+                        containerColor = if (isExpanded) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+                        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                    )
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column {
-                            Text(
-                                text = "Question $qNum",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
+                    Column {
+                        // Section header — always visible, clickable
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { expandedSections[index] = !isExpanded }
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "Your Option: ${if (userSelection == 0) "Blank" else userSelection}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    fontWeight = FontWeight.SemiBold
+                                    text = secData.sectionName,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
-                                if (hasKey) {
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    if (hasKey) {
+                                        Text(
+                                            text = "C:${secData.correct}",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = Color(0xFF2E7D32),
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                        Text(
+                                            text = "W:${secData.incorrect}",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.error,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                        Text(
+                                            text = "B:${secData.empty}",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = Color.Gray,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    } else {
+                                        val answeredSec = (secData.startQ..secData.endQ).count { attemptAnswers[it] ?: 0 != 0 }
+                                        Text(
+                                            text = "Filled: $answeredSec/${secData.totalQuestions}",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = Color(0xFF2E7D32),
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    }
                                     Text(
-                                        text = "•",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = Color.Gray
-                                    )
-                                    Text(
-                                        text = "Correct Option: $correctSelection",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = Color(0xFF2E7D32)
+                                        text = "of ${secData.totalQuestions}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                                     )
                                 }
+                            }
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                if (hasKey) {
+                                    Text(
+                                        text = "${String.format("%.0f", secData.rawPercentage)}%",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                                Icon(
+                                    imageVector = if (isExpanded) Icons.AutoMirrored.Filled.KeyboardArrowUp else Icons.AutoMirrored.Filled.KeyboardArrowDown,
+                                    contentDescription = if (isExpanded) "Collapse" else "Expand",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(20.dp)
+                                )
                             }
                         }
 
-                        // Right hand marker icon
-                        if (hasKey) {
-                            when {
-                                isUnanswered -> {
-                                    Icon(
-                                        imageVector = Icons.Default.Info,
-                                        contentDescription = "Unanswered",
-                                        tint = Color.Gray
-                                    )
-                                }
-                                isCorrect -> {
-                                    Icon(
-                                        imageVector = Icons.Default.Check,
-                                        contentDescription = "Correct",
-                                        tint = Color(0xFF2E7D32)
-                                    )
-                                }
-                                else -> {
-                                    Icon(
-                                        imageVector = Icons.Default.Close,
-                                        contentDescription = "Incorrect",
-                                        tint = MaterialTheme.colorScheme.error
-                                    )
-                                }
-                            }
-                        } else {
-                            if (!isUnanswered) {
-                                Icon(
-                                    imageVector = Icons.Default.Check,
-                                    contentDescription = "Saved Answer",
-                                    tint = Color(0xFF3F51B5),
-                                    modifier = Modifier.size(20.dp)
+                        // Expanded — show questions inline
+                        AnimatedVisibility(visible = isExpanded) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(start = 12.dp, end = 12.dp, bottom = 12.dp)
+                            ) {
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(bottom = 8.dp),
+                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                                 )
+                                val range = secData.startQ..secData.endQ
+                                range.forEach { qNum ->
+                                    val userSelection = attemptAnswers[qNum] ?: 0
+                                    val correctSelection = if (hasKey) correctKeyAnswers[qNum] ?: 0 else 0
+                                    val isCorrect = hasKey && userSelection == correctSelection
+                                    val isUnanswered = userSelection == 0
+
+                                    val userChar = when (userSelection) { 1 -> "A"; 2 -> "B"; 3 -> "C"; 4 -> "D"; else -> "—" }
+                                    val correctChar = when (correctSelection) { 1 -> "A"; 2 -> "B"; 3 -> "C"; 4 -> "D"; else -> "" }
+
+                                    val statusIcon = when {
+                                        !hasKey && !isUnanswered -> Icons.Default.Check
+                                        isUnanswered -> Icons.Default.Info
+                                        isCorrect -> Icons.Default.Check
+                                        else -> Icons.Default.Close
+                                    }
+                                    val statusTint = when {
+                                        !hasKey && !isUnanswered -> Color(0xFF3F51B5)
+                                        isUnanswered -> Color.Gray
+                                        isCorrect -> Color(0xFF2E7D32)
+                                        else -> MaterialTheme.colorScheme.error
+                                    }
+                                    val rowBg = when {
+                                        !hasKey && !isUnanswered -> Color(0xFFE8EAF6).copy(alpha = 0.5f)
+                                        isUnanswered -> Color.Transparent
+                                        isCorrect -> Color(0xFFE8F5E9).copy(alpha = 0.5f)
+                                        else -> Color(0xFFFFEBEE).copy(alpha = 0.5f)
+                                    }
+
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .background(rowBg, RoundedCornerShape(6.dp))
+                                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            Text(
+                                                text = "Q$qNum",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.onSurface,
+                                                modifier = Modifier.width(28.dp)
+                                            )
+                                            Text(
+                                                text = userChar,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.Bold,
+                                                color = statusTint
+                                            )
+                                            if (hasKey && !isUnanswered) {
+                                                Text(
+                                                    text = if (isCorrect) "✓" else "→$correctChar",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = if (isCorrect) Color(0xFF2E7D32) else MaterialTheme.colorScheme.error
+                                                )
+                                            }
+                                        }
+                                        Icon(
+                                            imageVector = statusIcon,
+                                            contentDescription = null,
+                                            tint = statusTint,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
                 }
             }
 
-            // Actions panel buttons
+            // Action buttons
             item {
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(4.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Button(
+                    OutlinedButton(
                         onClick = onBackToDashboard,
                         modifier = Modifier
                             .weight(1f)
-                            .height(52.dp)
+                            .height(44.dp)
                             .testTag("back_to_dashboard_button"),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-                        ),
-                        shape = RoundedCornerShape(12.dp)
+                        shape = RoundedCornerShape(10.dp)
                     ) {
-                        Text("Back to Dashboard", fontWeight = FontWeight.Bold)
+                        Text("Dashboard", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                     }
 
                     Button(
                         onClick = { viewModel.navigateTo(Screen.TakeExam(currentExam.id)) },
                         modifier = Modifier
                             .weight(1f)
-                            .height(52.dp)
+                            .height(44.dp)
                             .testTag("retake_exam_button"),
-                        shape = RoundedCornerShape(12.dp)
+                        shape = RoundedCornerShape(10.dp)
                     ) {
-                        Icon(imageVector = Icons.Default.Refresh, contentDescription = null)
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(if (hasKey) "Retake Exam" else "Record Again", fontWeight = FontWeight.Bold)
+                        Icon(imageVector = Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(if (hasKey) "Retake" else "Record Again", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                     }
                 }
             }
@@ -834,7 +714,7 @@ fun ResultsScreen(
 }
 
 @Composable
-fun ScoreBreakdownItem(
+fun CompactStatItem(
     label: String,
     count: Int,
     tint: Color,
@@ -847,13 +727,12 @@ fun ScoreBreakdownItem(
         Text(
             text = "$count",
             fontWeight = FontWeight.Black,
-            fontSize = 20.sp,
+            fontSize = 16.sp,
             color = tint
         )
         Text(
             text = label,
-            style = MaterialTheme.typography.bodySmall,
-            fontWeight = FontWeight.Medium,
+            style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
         )
     }
@@ -873,29 +752,27 @@ data class SectionAnalyticData(
 )
 
 @Composable
-fun LegendIndicatorItem(
+fun LegendDot(
     color: Color,
-    bgColor: Color,
-    text: String,
+    label: String,
     modifier: Modifier = Modifier
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
         modifier = modifier
     ) {
         Box(
             modifier = Modifier
-                .size(16.dp)
+                .size(8.dp)
                 .clip(CircleShape)
-                .background(bgColor)
-                .border(BorderStroke(1.2.dp, color), CircleShape)
+                .background(color)
         )
         Text(
-            text = text,
+            text = label,
             style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            fontSize = 10.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
         )
     }
 }

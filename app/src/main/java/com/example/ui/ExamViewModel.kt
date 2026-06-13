@@ -7,6 +7,7 @@ import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.*
@@ -25,7 +26,6 @@ sealed class Screen {
     data class ExamResult(val examId: Long, val attemptId: Long) : Screen()
 }
 
-// Struct to store parsed CSV row
 data class ParsedRow(
     val qNum: Int,
     val correctOpt: Int,
@@ -36,25 +36,24 @@ class ExamViewModel(application: Application) : AndroidViewModel(application) {
     private val database = ExamDatabase.getDatabase(application)
     private val repository = ExamRepository(database.examDao())
 
-    // App state
     var currentScreen by mutableStateOf<Screen>(Screen.Dashboard)
         private set
 
-    // Active Exams list from Room
     val exams: StateFlow<List<Exam>> = repository.allExams
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    // Selected exam
     private val _selectedExam = MutableStateFlow<Exam?>(null)
     val selectedExam: StateFlow<Exam?> = _selectedExam.asStateFlow()
 
-    // Attempts for selected exam
     private val _attemptsOfSelectedExam = MutableStateFlow<List<ExamAttempt>>(emptyList())
     val attemptsOfSelectedExam: StateFlow<List<ExamAttempt>> = _attemptsOfSelectedExam.asStateFlow()
 
-    // Active selected attempt
     private val _selectedAttempt = MutableStateFlow<ExamAttempt?>(null)
     val selectedAttempt: StateFlow<ExamAttempt?> = _selectedAttempt.asStateFlow()
+
+    val draftExamIds: StateFlow<Set<Long>> = repository.getDraftExamIds()
+        .map { it.toSet() }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
 
     // ----------------------------------------------------
     // EXAM CREATION FORM STATE
@@ -67,26 +66,26 @@ class ExamViewModel(application: Application) : AndroidViewModel(application) {
     var createTimerSeconds by mutableStateOf("00")
     var createCsvInputText by mutableStateOf("")
     var csvError by mutableStateOf("")
-    
-    // Custom sections in creation
     var customSections = mutableListOf<ExamSection>()
-    
-    // Status message
     var validationError by mutableStateOf("")
 
     // ----------------------------------------------------
     // EXAM TAKING STATE
     // ----------------------------------------------------
     var activeExamId by mutableStateOf<Long?>(null)
-    val activeAnswers = androidx.compose.runtime.mutableStateMapOf<Int, Int>() // Q -> Selected option (1-4)
+    val activeAnswers = androidx.compose.runtime.mutableStateMapOf<Int, Int>()
     var currentSectionIndex by mutableStateOf(0)
     var activeSectionsList by mutableStateOf<List<ExamSection>>(emptyList())
     var timeRemainingSeconds by mutableStateOf<Long>(0L)
     var activeTimeLimitSeconds by mutableStateOf<Long?>(null)
     var activeTimeSpentSeconds by mutableStateOf<Long>(0L)
-    
+    var activeDraftId by mutableStateOf<Long?>(null)
+        private set
+
     private var timerJob: Job? = null
     private var timerStartTimeMs = 0L
+    private var draftLoaded = false
+    private var autoSaveJob: Job? = null
 
     // ----------------------------------------------------
     // ACTIONS
@@ -152,6 +151,56 @@ class ExamViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     // ----------------------------------------------------
+    // DRAFT / AUTO-SAVE LOGIC
+    // ----------------------------------------------------
+    fun saveDraft() {
+        val examId = activeExamId ?: return
+        val currentExam = selectedExam.value ?: return
+
+        viewModelScope.launch {
+            val attempt = ExamAttempt(
+                id = activeDraftId ?: 0,
+                examId = examId,
+                answersJson = JsonSerializer.serializeMap(activeAnswers),
+                timeSpentSeconds = activeTimeSpentSeconds,
+                totalQuestions = currentExam.totalQuestions,
+                correctCount = 0,
+                incorrectCount = 0,
+                unansweredCount = 0,
+                percentage = 0.0,
+                negativeScore = 0.0,
+                negativeScorePercentage = 0.0,
+                isDraft = true
+            )
+            val savedId = repository.insertAttempt(attempt)
+            activeDraftId = savedId
+        }
+    }
+
+    fun saveAndExit() {
+        saveDraft()
+        val examId = activeExamId ?: return
+        timerJob?.cancel()
+        timerJob = null
+        autoSaveJob?.cancel()
+        autoSaveJob = null
+        navigateTo(Screen.ExamDetail(examId))
+    }
+
+    private fun startAutoSave() {
+        autoSaveJob?.cancel()
+        autoSaveJob = viewModelScope.launch {
+            snapshotFlow { activeAnswers.toMap() }
+                .collectLatest {
+                    if (draftLoaded) {
+                        delay(500)
+                        saveDraft()
+                    }
+                }
+        }
+    }
+
+    // ----------------------------------------------------
     // EXAM CREATION LOGIC
     // ----------------------------------------------------
     fun clearCreationForm() {
@@ -167,7 +216,6 @@ class ExamViewModel(application: Application) : AndroidViewModel(application) {
         customSections.clear()
     }
 
-    // Process pasted key/CSV or selected file text
     fun processCsvText(text: String): List<ParsedRow> {
         val rows = mutableListOf<ParsedRow>()
         val lines = text.split("\n", "\r")
@@ -179,12 +227,10 @@ class ExamViewModel(application: Application) : AndroidViewModel(application) {
             val rawA = tokens[1].trim()
             val sectionVal = if (tokens.size >= 3) tokens[2].trim() else null
 
-            // Clean question number
             val numStr = rawQ.filter { it.isDigit() }
-            val qNum = numStr.toIntOrNull() ?: continue // Skip headers or non-numerics gracefully
+            val qNum = numStr.toIntOrNull() ?: continue
             
-            // Parse Option
-            val correctOpt = parseOptionChar(rawA) ?: continue // Skip lines with invalid answers
+            val correctOpt = parseOptionChar(rawA) ?: continue
 
             rows.add(ParsedRow(qNum = qNum, correctOpt = correctOpt, sectionName = sectionVal))
         }
@@ -232,7 +278,6 @@ class ExamViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
 
-        // CSV Key is optional now
         val answersMap = mutableMapOf<Int, Int>()
         val csvSectionsMap = mutableMapOf<String, MutableList<Int>>()
         var actualTotalQuestions = totalQuestions
@@ -256,12 +301,10 @@ class ExamViewModel(application: Application) : AndroidViewModel(application) {
             actualTotalQuestions = maxOf(totalQuestions, maxCsvQuestion)
         }
 
-        // Build Sections List
         val finalSections = mutableListOf<ExamSection>()
         if (customSections.isNotEmpty()) {
             finalSections.addAll(customSections)
         } else if (csvSectionsMap.isNotEmpty()) {
-            // Auto detected sections from CSV columns
             csvSectionsMap.forEach { (secName, qList) ->
                 val start = qList.minOrNull() ?: 1
                 val end = qList.maxOrNull() ?: 1
@@ -269,15 +312,12 @@ class ExamViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
 
-        // If no sections exists overall, create a default single section
         if (finalSections.isEmpty()) {
             finalSections.add(ExamSection(name = "General", startQuestion = 1, endQuestion = actualTotalQuestions))
         } else {
-            // Sort sections by starting question
             finalSections.sortBy { it.startQuestion }
         }
 
-        // Convert to JSON
         val sectionsJson = JsonSerializer.serializeSections(finalSections)
         val answersJson = JsonSerializer.serializeMap(answersMap)
 
@@ -313,7 +353,10 @@ class ExamViewModel(application: Application) : AndroidViewModel(application) {
     // ----------------------------------------------------
     private fun startExam(examId: Long) {
         timerJob?.cancel()
+        autoSaveJob?.cancel()
         activeExamId = examId
+        activeDraftId = null
+        draftLoaded = false
         activeAnswers.clear()
         currentSectionIndex = 0
 
@@ -321,18 +364,36 @@ class ExamViewModel(application: Application) : AndroidViewModel(application) {
             val exam = repository.getExamById(examId) ?: return@launch
             _selectedExam.value = exam
             activeSectionsList = JsonSerializer.deserializeSections(exam.sectionsJson)
-            
-            // Pre-populate unanswered state
-            for (q in 1..exam.totalQuestions) {
-                activeAnswers[q] = 0 // 0 means unanswered
+
+            // Check for existing draft
+            val draft = repository.getDraftAttempt(examId)
+            if (draft != null) {
+                val draftAnswers = JsonSerializer.deserializeMap(draft.answersJson)
+                activeAnswers.clear()
+                draftAnswers.forEach { (q, ans) -> activeAnswers[q] = ans }
+                // Fill in any missing questions
+                for (q in 1..exam.totalQuestions) {
+                    if (q !in activeAnswers) activeAnswers[q] = 0
+                }
+                activeDraftId = draft.id
+                activeTimeSpentSeconds = draft.timeSpentSeconds
+            } else {
+                for (q in 1..exam.totalQuestions) {
+                    activeAnswers[q] = 0
+                }
+                activeTimeSpentSeconds = 0L
             }
 
+            draftLoaded = true
+            startAutoSave()
+
             activeTimeLimitSeconds = exam.timerSeconds
-            activeTimeSpentSeconds = 0L
 
             if (exam.timerSeconds != null && exam.timerSeconds > 0L) {
-                timeRemainingSeconds = exam.timerSeconds
-                timerStartTimeMs = System.currentTimeMillis()
+                val elapsed = activeTimeSpentSeconds
+                val remaining = maxOf(0L, exam.timerSeconds - elapsed)
+                timeRemainingSeconds = remaining
+                timerStartTimeMs = System.currentTimeMillis() - (elapsed * 1000)
                 val targetEndTimeMs = timerStartTimeMs + (exam.timerSeconds * 1000)
                 
                 timerJob = viewModelScope.launch {
@@ -349,8 +410,7 @@ class ExamViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
             } else {
-                // Untimed, start counting time up
-                timerStartTimeMs = System.currentTimeMillis()
+                timerStartTimeMs = System.currentTimeMillis() - (activeTimeSpentSeconds * 1000)
                 timerJob = viewModelScope.launch {
                     while (true) {
                         activeTimeSpentSeconds = (System.currentTimeMillis() - timerStartTimeMs) / 1000
@@ -364,6 +424,8 @@ class ExamViewModel(application: Application) : AndroidViewModel(application) {
     fun submitExamAnswers() {
         timerJob?.cancel()
         timerJob = null
+        autoSaveJob?.cancel()
+        autoSaveJob = null
 
         val examId = activeExamId ?: return
         val currentExam = selectedExam.value ?: return
@@ -375,7 +437,6 @@ class ExamViewModel(application: Application) : AndroidViewModel(application) {
             var incorrectCount = 0
             var unansweredCount = 0
 
-            // Let's iterate all questions
             for (q in 1..currentExam.totalQuestions) {
                 val userAns = activeAnswers[q] ?: 0
                 val correctAns = correctKeyMap[q] ?: 0
@@ -395,9 +456,6 @@ class ExamViewModel(application: Application) : AndroidViewModel(application) {
                 0.0
             }
 
-            // Negative scoring computation:
-            // Standard university negative marking: -0.33 for incorrect answers, 0 for empty, +1 for correct
-            // Max score = totalQuestions
             val rawNegativeScore = (correctCount * 1.0) + (incorrectCount * -0.33)
             val negativeScorePercentage = if (currentExam.totalQuestions > 0) {
                 (rawNegativeScore / currentExam.totalQuestions.toDouble()) * 100.0
@@ -415,11 +473,24 @@ class ExamViewModel(application: Application) : AndroidViewModel(application) {
                 unansweredCount = unansweredCount,
                 percentage = percentage,
                 negativeScore = rawNegativeScore,
-                negativeScorePercentage = negativeScorePercentage
+                negativeScorePercentage = negativeScorePercentage,
+                isDraft = false
             )
 
             val attemptId = repository.insertAttempt(attempt)
+
+            // Delete the draft if it exists
+            repository.deleteDraftAttempt(examId)
+            activeDraftId = null
+
             navigateTo(Screen.ExamResult(examId, attemptId))
+        }
+    }
+
+    fun startFreshExam(examId: Long) {
+        viewModelScope.launch {
+            repository.deleteDraftAttempt(examId)
+            navigateTo(Screen.TakeExam(examId))
         }
     }
 }

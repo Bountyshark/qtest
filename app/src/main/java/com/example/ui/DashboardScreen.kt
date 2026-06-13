@@ -44,6 +44,7 @@ fun DashboardScreen(
     val exams by viewModel.exams.collectAsState()
     val selectedExam by viewModel.selectedExam.collectAsState()
     val attempts by viewModel.attemptsOfSelectedExam.collectAsState()
+    val draftExamIds by viewModel.draftExamIds.collectAsState()
 
     var showDeleteConfirm by remember { mutableStateOf<Long?>(null) }
 
@@ -233,7 +234,9 @@ fun DashboardScreen(
                         items(exams) { exam ->
                             ExamCard(
                                 exam = exam,
+                                hasDraft = exam.id in draftExamIds,
                                 onClick = { viewModel.navigateTo(Screen.ExamDetail(exam.id)) },
+                                onContinue = { viewModel.navigateTo(Screen.TakeExam(exam.id)) },
                                 onDelete = { showDeleteConfirm = exam.id }
                             )
                         }
@@ -244,8 +247,10 @@ fun DashboardScreen(
                 ExamDetailContent(
                     exam = selectedExam!!,
                     attempts = attempts,
+                    hasDraft = selectedExam!!.id in draftExamIds,
                     onBack = { viewModel.navigateTo(Screen.Dashboard) },
                     onTakeExam = { viewModel.navigateTo(Screen.TakeExam(selectedExam!!.id)) },
+                    onStartFresh = { viewModel.startFreshExam(selectedExam!!.id) },
                     onViewAttempt = { attemptId -> viewModel.navigateTo(Screen.ExamResult(selectedExam!!.id, attemptId)) },
                     onDeleteAttempt = { attemptId -> viewModel.deleteAttempt(attemptId, selectedExam!!.id) }
                 )
@@ -283,7 +288,9 @@ fun DashboardScreen(
 @Composable
 fun ExamCard(
     exam: Exam,
+    hasDraft: Boolean = false,
     onClick: () -> Unit,
+    onContinue: () -> Unit = {},
     onDelete: () -> Unit
 ) {
     Card(
@@ -301,14 +308,33 @@ fun ExamCard(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = exam.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = exam.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    if (hasDraft) {
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = MaterialTheme.colorScheme.tertiaryContainer
+                        ) {
+                            Text(
+                                text = "Draft",
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer
+                            )
+                        }
+                    }
+                }
                 Spacer(modifier = Modifier.height(4.dp))
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -333,6 +359,22 @@ fun ExamCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
                     )
                 }
+                if (hasDraft) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(
+                        onClick = onContinue,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("continue_exam_button_${exam.id}"),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.tertiary,
+                            contentColor = MaterialTheme.colorScheme.onTertiary
+                        )
+                    ) {
+                        Text("Continue", fontWeight = FontWeight.Bold)
+                    }
+                }
             }
             IconButton(
                 onClick = onDelete,
@@ -352,8 +394,10 @@ fun ExamCard(
 fun ExamDetailContent(
     exam: Exam,
     attempts: List<ExamAttempt>,
+    hasDraft: Boolean = false,
     onBack: () -> Unit,
     onTakeExam: () -> Unit,
+    onStartFresh: () -> Unit = {},
     onViewAttempt: (Long) -> Unit,
     onDeleteAttempt: (Long) -> Unit
 ) {
@@ -445,17 +489,48 @@ fun ExamDetailContent(
         }
 
         item {
-            Button(
-                onClick = onTakeExam,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("start_exam_button")
-                    .height(52.dp),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Icon(imageVector = Icons.Default.PlayArrow, contentDescription = null)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Start Practice Attempt", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            if (hasDraft) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = onTakeExam,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("continue_practice_button")
+                            .height(52.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.tertiary,
+                            contentColor = MaterialTheme.colorScheme.onTertiary
+                        )
+                    ) {
+                        Icon(imageVector = Icons.Default.PlayArrow, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Continue Practice", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    }
+                    OutlinedButton(
+                        onClick = onStartFresh,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("start_fresh_button")
+                            .height(44.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Start New Attempt", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    }
+                }
+            } else {
+                Button(
+                    onClick = onTakeExam,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("start_exam_button")
+                        .height(52.dp),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(imageVector = Icons.Default.PlayArrow, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Start Practice Attempt", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                }
             }
         }
 
