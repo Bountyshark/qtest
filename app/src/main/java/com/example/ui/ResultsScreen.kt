@@ -16,11 +16,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowDown
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
@@ -169,7 +168,7 @@ fun ResultsScreen(
                             modifier = Modifier.testTag("copy_csv_button")
                         ) {
                             Icon(
-                                imageVector = Icons.Default.ContentCopy,
+                                imageVector = Icons.Default.Check,
                                 contentDescription = "Copy CSV",
                                 tint = MaterialTheme.colorScheme.primary
                             )
@@ -364,7 +363,7 @@ fun ResultsScreen(
                                 }
                             }
                             Icon(
-                                imageVector = if (omrExpanded) Icons.AutoMirrored.Filled.KeyboardArrowUp else Icons.AutoMirrored.Filled.KeyboardArrowDown,
+                                imageVector = if (omrExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
                                 contentDescription = if (omrExpanded) "Collapse" else "Expand",
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -581,7 +580,7 @@ fun ResultsScreen(
                                     )
                                 }
                                 Icon(
-                                    imageVector = if (isExpanded) Icons.AutoMirrored.Filled.KeyboardArrowUp else Icons.AutoMirrored.Filled.KeyboardArrowDown,
+                                    imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
                                     contentDescription = if (isExpanded) "Collapse" else "Expand",
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.size(20.dp)
