@@ -1,0 +1,6 @@
+{
+  "name": "Exam Grader & Tracker",
+  "description": "Create exams with sections and CSV keys, take them with rich visual metrics, negative scoring, and dynamic performance charting.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
