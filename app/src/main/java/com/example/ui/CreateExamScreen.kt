@@ -8,7 +8,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.*
@@ -22,26 +21,25 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.ExamSection
+import com.example.ui.components.AppTopBar
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CreateExamScreen(
     viewModel: ExamViewModel,
     onBack: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     val scrollState = rememberScrollState()
 
-    // Temporary section addition states
     var secName by remember { mutableStateOf("") }
     var secStart by remember { mutableStateOf("") }
     var secEnd by remember { mutableStateOf("") }
     var sectionError by remember { mutableStateOf("") }
 
-    // CSV Document picker
     val csvPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
+        contract = ActivityResultContracts.GetContent(),
     ) { uri ->
         if (uri != null) {
             val content = viewModel.readCsvFromUri(context, uri)
@@ -53,23 +51,12 @@ fun CreateExamScreen(
 
     Scaffold(
         topBar = {
-            Column {
-                TopAppBar(
-                    title = { Text("Create Practice Exam", fontWeight = FontWeight.Black) },
-                    navigationIcon = {
-                        IconButton(onClick = onBack) {
-                            Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.background,
-                        titleContentColor = MaterialTheme.colorScheme.onBackground
-                    )
-                )
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-            }
+            AppTopBar(
+                title = "Create Practice Exam",
+                onBack = onBack,
+            )
         },
-        modifier = modifier
+        modifier = modifier,
     ) { innerPadding ->
         Column(
             modifier = Modifier
@@ -78,17 +65,15 @@ fun CreateExamScreen(
                 .background(MaterialTheme.colorScheme.background)
                 .verticalScroll(scrollState)
                 .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            // Title
             Text(
                 text = "Configure Specifications & Answers",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
+                color = MaterialTheme.colorScheme.primary,
             )
 
-            // Exam Name
             OutlinedTextField(
                 value = viewModel.createName,
                 onValueChange = { viewModel.createName = it },
@@ -98,10 +83,9 @@ fun CreateExamScreen(
                     .fillMaxWidth()
                     .testTag("create_exam_name_input"),
                 singleLine = true,
-                shape = RoundedCornerShape(16.dp)
+                shape = RoundedCornerShape(16.dp),
             )
 
-            // Total Questions
             OutlinedTextField(
                 value = viewModel.createTotalQuestionsText,
                 onValueChange = { viewModel.createTotalQuestionsText = it },
@@ -111,37 +95,35 @@ fun CreateExamScreen(
                     .fillMaxWidth()
                     .testTag("create_exam_questions_input"),
                 singleLine = true,
-                shape = RoundedCornerShape(16.dp)
+                shape = RoundedCornerShape(16.dp),
             )
 
-            // Optional Timer Settings
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                shape = RoundedCornerShape(16.dp)
+                shape = RoundedCornerShape(16.dp),
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Checkbox(
                             checked = viewModel.createHasTimer,
                             onCheckedChange = { viewModel.createHasTimer = it },
-                            modifier = Modifier.testTag("create_exam_timer_checkbox")
+                            modifier = Modifier.testTag("create_exam_timer_checkbox"),
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = "Set Exam Time Limit",
                             fontWeight = FontWeight.SemiBold,
-                            style = MaterialTheme.typography.bodyLarge
+                            style = MaterialTheme.typography.bodyLarge,
                         )
                     }
-
                     if (viewModel.createHasTimer) {
                         Spacer(modifier = Modifier.height(12.dp))
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
                             OutlinedTextField(
                                 value = viewModel.createTimerHours,
@@ -151,7 +133,7 @@ fun CreateExamScreen(
                                     .weight(1f)
                                     .testTag("create_exam_hours_input"),
                                 singleLine = true,
-                                shape = RoundedCornerShape(16.dp)
+                                shape = RoundedCornerShape(16.dp),
                             )
                             OutlinedTextField(
                                 value = viewModel.createTimerMinutes,
@@ -161,7 +143,7 @@ fun CreateExamScreen(
                                     .weight(1f)
                                     .testTag("create_exam_minutes_input"),
                                 singleLine = true,
-                                shape = RoundedCornerShape(16.dp)
+                                shape = RoundedCornerShape(16.dp),
                             )
                             OutlinedTextField(
                                 value = viewModel.createTimerSeconds,
@@ -171,34 +153,31 @@ fun CreateExamScreen(
                                     .weight(1f)
                                     .testTag("create_exam_seconds_input"),
                                 singleLine = true,
-                                shape = RoundedCornerShape(16.dp)
+                                shape = RoundedCornerShape(16.dp),
                             )
                         }
                     }
                 }
             }
 
-            // Optional Sections definition card
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                shape = RoundedCornerShape(16.dp)
+                shape = RoundedCornerShape(16.dp),
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
                         text = "Optional Exam Sections",
                         fontWeight = FontWeight.Bold,
                         style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.primary
+                        color = MaterialTheme.colorScheme.primary,
                     )
                     Text(
                         text = "Divide your exam into sections (e.g. Physics, Chemistry). If left empty, sections will be auto-detected from the CSV key.",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                     )
-
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    // Fields to add section
                     OutlinedTextField(
                         value = secName,
                         onValueChange = { secName = it },
@@ -206,14 +185,12 @@ fun CreateExamScreen(
                         placeholder = { Text("e.g. Physics") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
-                        shape = RoundedCornerShape(16.dp)
+                        shape = RoundedCornerShape(16.dp),
                     )
-
                     Spacer(modifier = Modifier.height(8.dp))
-
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         OutlinedTextField(
                             value = secStart,
@@ -222,7 +199,7 @@ fun CreateExamScreen(
                             placeholder = { Text("e.g. 1") },
                             modifier = Modifier.weight(1f),
                             singleLine = true,
-                            shape = RoundedCornerShape(16.dp)
+                            shape = RoundedCornerShape(16.dp),
                         )
                         OutlinedTextField(
                             value = secEnd,
@@ -231,7 +208,7 @@ fun CreateExamScreen(
                             placeholder = { Text("e.g. 30") },
                             modifier = Modifier.weight(1f),
                             singleLine = true,
-                            shape = RoundedCornerShape(16.dp)
+                            shape = RoundedCornerShape(16.dp),
                         )
                     }
 
@@ -240,12 +217,10 @@ fun CreateExamScreen(
                             text = sectionError,
                             color = MaterialTheme.colorScheme.error,
                             style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.padding(top = 4.dp)
+                            modifier = Modifier.padding(top = 4.dp),
                         )
                     }
-
                     Spacer(modifier = Modifier.height(12.dp))
-
                     Button(
                         onClick = {
                             sectionError = ""
@@ -259,13 +234,15 @@ fun CreateExamScreen(
                                 sectionError = "Invalid Q ranges specified"
                                 return@Button
                             }
-                            viewModel.customSections.add(ExamSection(name = secName, startQuestion = start, endQuestion = end))
+                            viewModel.customSections.add(
+                                ExamSection(name = secName, startQuestion = start, endQuestion = end)
+                            )
                             secName = ""
                             secStart = ""
                             secEnd = ""
                         },
                         modifier = Modifier.align(Alignment.End),
-                        shape = RoundedCornerShape(8.dp)
+                        shape = RoundedCornerShape(8.dp),
                     ) {
                         Text("Add Section")
                     }
@@ -277,30 +254,29 @@ fun CreateExamScreen(
                         Text(
                             text = "Configured Sections:",
                             fontWeight = FontWeight.Bold,
-                            style = MaterialTheme.typography.bodyMedium
+                            style = MaterialTheme.typography.bodyMedium,
                         )
-
                         viewModel.customSections.forEachIndexed { i, section ->
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(vertical = 4.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
+                                verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Text(
                                     text = "${section.name}: Q${section.startQuestion} - Q${section.endQuestion}",
                                     style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Medium
+                                    fontWeight = FontWeight.Medium,
                                 )
                                 IconButton(
                                     onClick = { viewModel.customSections.removeAt(i) },
-                                    modifier = Modifier.size(24.dp)
+                                    modifier = Modifier.size(24.dp),
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.Delete,
                                         contentDescription = "Delete",
-                                        tint = MaterialTheme.colorScheme.error
+                                        tint = MaterialTheme.colorScheme.error,
                                     )
                                 }
                             }
@@ -309,52 +285,51 @@ fun CreateExamScreen(
                 }
             }
 
-            // Answer Key CSV input card (Optional)
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                shape = RoundedCornerShape(16.dp)
+                shape = RoundedCornerShape(16.dp),
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
                         text = "Upload Answer Key (CSV) - Optional",
                         fontWeight = FontWeight.Bold,
                         style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.primary
+                        color = MaterialTheme.colorScheme.primary,
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = "Upload a CSV file or paste answers below. If omitted, this exam acts as a response recorder (bubble-sheet tracker) allowing you to save your answers and export them to a CSV file.",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                     )
-
                     Spacer(modifier = Modifier.height(12.dp))
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         Button(
                             onClick = { csvPickerLauncher.launch("text/*") },
                             modifier = Modifier
                                 .weight(1f)
                                 .testTag("upload_csv_button"),
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
-                            shape = RoundedCornerShape(16.dp)
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.secondary,
+                            ),
+                            shape = RoundedCornerShape(16.dp),
                         ) {
                             Text("Select CSV File")
                         }
                     }
 
                     Spacer(modifier = Modifier.height(12.dp))
-
                     OutlinedTextField(
                         value = viewModel.createCsvInputText,
                         onValueChange = { viewModel.createCsvInputText = it },
                         label = { Text("Paste Answer Key Content (CSV Format)") },
                         placeholder = {
                             Text(
-                                "Format: QuestionNum,CorrectOption,SectionName(optional)\ne.g.\n1,A,Physics\n2,1,Physics\n3,C,Chemistry"
+                                "Format: QuestionNum,CorrectOption,SectionName(optional)\ne.g.\n1,A,Physics\n2,1,Physics\n3,C,Chemistry",
                             )
                         },
                         modifier = Modifier
@@ -362,43 +337,44 @@ fun CreateExamScreen(
                             .height(150.dp)
                             .testTag("csv_pasted_input"),
                         textStyle = MaterialTheme.typography.bodySmall,
-                        shape = RoundedCornerShape(16.dp)
+                        shape = RoundedCornerShape(16.dp),
                     )
 
                     Spacer(modifier = Modifier.height(8.dp))
-
                     Surface(
                         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
                         shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
                     ) {
                         Row(
                             modifier = Modifier.padding(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Info,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(16.dp)
+                                modifier = Modifier.size(16.dp),
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
                                 text = "Correct answers are parsed into Option 1, 2, 3, or 4. (Letters A, B, C, D automatically translate to options 1, 2, 3, 4).",
                                 style = MaterialTheme.typography.bodySmall,
                                 fontSize = 10.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
                             )
                         }
                     }
                 }
             }
 
-            // Error display
             if (viewModel.validationError.isNotBlank()) {
                 Card(
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
-                    modifier = Modifier.fillMaxWidth()
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
                 ) {
                     Text(
                         text = viewModel.validationError,
@@ -406,22 +382,23 @@ fun CreateExamScreen(
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Medium,
                         modifier = Modifier.padding(12.dp),
-                        textAlign = TextAlign.Center
+                        textAlign = TextAlign.Center,
                     )
                 }
             }
 
-            // Create submit button
             Button(
                 onClick = { viewModel.submitCreateExam(context) },
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("submit_exam_creation_button")
                     .height(52.dp),
-                shape = RoundedCornerShape(16.dp)
+                shape = RoundedCornerShape(16.dp),
             ) {
                 Text("Create Practice Exam", fontWeight = FontWeight.Bold, fontSize = 16.sp)
             }
+
+            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 }
